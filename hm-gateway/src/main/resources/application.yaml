@@ -30,6 +30,10 @@ spring:
           uri: lb://pay-service
           predicates:
             - Path=/pay-orders/**
+        - id: ai
+          uri: http://127.0.0.1:8087
+          predicates:
+            - Path=/ai/**
 hm:
   jwt:
     location: classpath:hmall.jks
