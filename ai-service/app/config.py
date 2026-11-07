@@ -15,9 +15,10 @@ class Settings(BaseSettings):
     app_name: str = "lexuan-agent"
     app_port: int = 8087
 
-    # 下游 Java 服务
-    item_service_url: str = "http://127.0.0.1:8080"
-    trade_service_url: str = "http://127.0.0.1:8080"
+    # 下游 Java 服务（直连服务实例，不走网关：
+    # 网关负责鉴权并透传 user-info，ai-service 已拿到用户身份，直连更省一次跳转）
+    item_service_url: str = "http://127.0.0.1:8081"
+    trade_service_url: str = "http://127.0.0.1:8085"
 
 
 settings = Settings()

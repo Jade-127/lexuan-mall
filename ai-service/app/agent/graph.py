@@ -14,7 +14,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.config import settings
-from app.tools.demo_tools import query_my_orders, search_items
+from app.tools.shop_tools import query_my_orders, search_items
 
 TOOLS = [search_items, query_my_orders]
 

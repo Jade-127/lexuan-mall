@@ -7,10 +7,11 @@ D3：/ai/chat/stream —— SSE 流式输出，接通网关后即可被前端消
 import json
 import time
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.agent.manual_loop import run_agent
+from app.clients.context import set_user_info
 from app.config import settings
 from app.llm import chat_once, chat_stream_text
 from app.agent.graph import run_graph
@@ -134,6 +135,8 @@ async def agent_demo(q: str = Query(..., description="测试用的用户问题")
     return {"ok": True, "question": q, **result}
 
 @app.get("/ai/agent/graph")
-async def agent_graph(q: str = Query(..., description="测试问题")):
+async def agent_graph(request: Request, q: str = Query(..., description="测试问题")):
+    """LangGraph 版 Agent。user-info 由网关鉴权后透传，这里存进上下文供工具读取。"""
+    set_user_info(request.headers.get("user-info"))
     result = await run_graph(q)
     return {"ok": True, "question": q, **result}
