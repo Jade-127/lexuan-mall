@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.agent.manual_loop import run_agent
 from app.config import settings
 from app.llm import chat_once, chat_stream_text
+from app.agent.graph import run_graph
 
 app = FastAPI(
     title="乐选优品 · 智能客服 Agent",
@@ -130,4 +131,9 @@ async def agent_demo(q: str = Query(..., description="测试用的用户问题")
     返回里带 trace，可以看到模型这一轮选了哪个工具、参数是什么、拿回什么。
     """
     result = await run_agent(q)
+    return {"ok": True, "question": q, **result}
+
+@app.get("/ai/agent/graph")
+async def agent_graph(q: str = Query(..., description="测试问题")):
+    result = await run_graph(q)
     return {"ok": True, "question": q, **result}
