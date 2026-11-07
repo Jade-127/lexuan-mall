@@ -1,6 +1,7 @@
 package com.hmall.item.controller;
 
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmall.common.domain.PageDTO;
 import com.hmall.common.domain.PageQuery;
@@ -31,6 +32,22 @@ public class ItemController {
         Page<Item> result = itemService.page(query.toMpPage("update_time", false));
         // 2.封装并返回
         return PageDTO.of(result, ItemDTO.class);
+    }
+
+    @ApiOperation("按关键词和价格区间搜索商品（供智能客服使用）")
+    @GetMapping("/search")
+    public PageDTO<ItemDTO> searchItems(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer minPrice,
+            @RequestParam(required = false) Integer maxPrice,
+            PageQuery query) {
+        Page<Item> page = itemService.lambdaQuery()
+                .eq(Item::getStatus, 1)                                              // 只搜在售商品
+                .like(StrUtil.isNotBlank(keyword), Item::getName, keyword)            // 关键词模糊匹配
+                .ge(minPrice != null, Item::getPrice, minPrice)                       // 价格下限（分）
+                .le(maxPrice != null, Item::getPrice, maxPrice)                       // 价格上限（分）
+                .page(query.toMpPage("update_time", false));
+        return PageDTO.of(page, ItemDTO.class);
     }
 
     @ApiOperation("根据id批量查询商品")

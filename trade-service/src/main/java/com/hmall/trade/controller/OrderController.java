@@ -1,8 +1,10 @@
 package com.hmall.trade.controller;
 
 import com.hmall.common.utils.BeanUtils;
+import com.hmall.common.utils.UserContext;
 
 import com.hmall.trade.domain.dto.OrderFormDTO;
+import com.hmall.trade.domain.po.Order;
 import com.hmall.trade.domain.vo.OrderVO;
 import com.hmall.trade.service.IOrderService;
 import io.swagger.annotations.Api;
@@ -11,6 +13,8 @@ import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Api(tags = "订单管理接口")
 @RestController
@@ -23,6 +27,19 @@ public class OrderController {
     @GetMapping("{id}")
     public OrderVO queryOrderById(@Param ("订单id")@PathVariable("id") Long orderId) {
         return BeanUtils.copyBean(orderService.getById(orderId), OrderVO.class);
+    }
+
+    @ApiOperation("查询当前登录用户的订单列表（供智能客服使用）")
+    @GetMapping("/my")
+    public List<OrderVO> queryMyOrders(@RequestParam(required = false) Integer status) {
+        // userId 来自网关透传的 user-info 请求头，不接受前端传入，天然防越权
+        Long userId = UserContext.getUser();
+        List<Order> list = orderService.lambdaQuery()
+                .eq(Order::getUserId, userId)
+                .eq(status != null, Order::getStatus, status)
+                .orderByDesc(Order::getCreateTime)
+                .list();
+        return BeanUtils.copyList(list, OrderVO.class);
     }
 
     @ApiOperation("创建订单")
