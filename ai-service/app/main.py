@@ -10,6 +10,7 @@ import time
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 
+from app.agent.manual_loop import run_agent
 from app.config import settings
 from app.llm import chat_once, chat_stream_text
 
@@ -120,3 +121,13 @@ async def chat_stream(
             "X-Accel-Buffering": "no",  # 告诉 nginx 不要缓冲，否则流式会被攒成一坨
         },
     )
+
+
+@app.get("/ai/agent/demo")
+async def agent_demo(q: str = Query(..., description="测试用的用户问题")):
+    """D4 验收用：手写 tool-call 循环。
+
+    返回里带 trace，可以看到模型这一轮选了哪个工具、参数是什么、拿回什么。
+    """
+    result = await run_agent(q)
+    return {"ok": True, "question": q, **result}
