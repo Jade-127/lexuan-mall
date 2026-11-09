@@ -14,9 +14,9 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.config import settings
-from app.tools.shop_tools import query_my_orders, search_items, get_order_detail
+from app.tools.shop_tools import get_order_detail, query_my_orders, search_items, search_knowledge
 
-TOOLS = [search_items, query_my_orders,get_order_detail]
+TOOLS = [search_items, query_my_orders, get_order_detail, search_knowledge]
 
 SYSTEM = (
     "你是乐选优品的在线客服「小乐」。"

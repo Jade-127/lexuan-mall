@@ -20,5 +20,8 @@ class Settings(BaseSettings):
     item_service_url: str = "http://127.0.0.1:8081"
     trade_service_url: str = "http://127.0.0.1:8085"
 
+    # 向量库（虚拟机上的 pgvector）
+    pg_dsn: str = "postgresql://postgres:hmall123@192.168.74.128:5433/ai_cs"
+
 
 settings = Settings()

@@ -14,6 +14,7 @@ from langchain_core.tools import tool
 from app.clients import item_client, trade_client
 from app.clients.context import get_user_info
 from app.common.tool_log import tool_span
+from app.rag.retriever import search_knowledge as search_knowledge_docs
 
 
 @tool
@@ -77,3 +78,26 @@ async def get_order_detail(order_id: str) -> str:
         # 3. 正常返回，顺手抹掉不需要给模型看的字段
         order.pop("userId", None)
         return json.dumps(order, ensure_ascii=False)
+
+
+@tool
+async def search_knowledge(question: str) -> str:
+    """检索乐选优品的售后政策知识库（退换货、运费、退款、支付、配送、发票等规则）。
+
+    什么时候用：用户问"能不能退""运费谁出""多久到""怎么开发票"这类规则问题。
+    不要用于：查具体订单状态（用 query_my_orders）、找商品（用 search_items）。
+
+    返回命中的政策文档片段；如果没有任何相关内容，会返回 found=0，
+    这时你必须回答"没有查到相关规定"，绝对不要凭记忆编造政策。
+    """
+    with tool_span("search_knowledge", {"question": question}) as span:
+        hits = await search_knowledge_docs(question)
+
+        if not hits:
+            span["error"] = "NO_HIT"       # 记下来，方便统计"知识库覆盖不到的问题"
+            return json.dumps(
+                {"found": 0, "message": "知识库中没有查到相关规定"}, ensure_ascii=False
+            )
+
+        docs = [{"title": h["title"], "content": h["content"], "score": round(h["score"], 3)} for h in hits]
+        return json.dumps({"found": len(docs), "docs": docs}, ensure_ascii=False)
