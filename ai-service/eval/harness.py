@@ -1,10 +1,15 @@
 """检索评测框架（D11）。
 
 做什么：
-1. 读 eval/cases.jsonl（10 条问题 + 期望命中的文档）
+1. 读 eval/cases.jsonl（问题 + 期望命中的文档，可多个）
 2. 每条调 search_knowledge
 3. 用 is_hit() 判断是否命中
 4. 汇总召回率，列出失败用例
+
+为什么 expect_doc 允许是数组：
+同一个问题可能有两篇文档都合法（比如"商品有问题运费谁承担"，
+「退货运费规则」和「质量问题处理」都写了）。只认一篇会误判成失败，
+这叫"标注歧义"，业界通常允许标注多个可接受答案。
 
 用法（ai-service 目录下）：
     .\.venv\Scripts\python.exe eval\harness.py
@@ -21,53 +26,47 @@ from app.rag.retriever import search_knowledge  # noqa: E402
 CASES_FILE = Path("eval/cases.jsonl")
 
 
-def is_hit(hits: list[dict], expect_doc: str) -> bool:
+def is_hit(hits: list[dict], expect_docs: list[str]) -> bool:
     """判断一次检索算不算命中。
 
     规则：
-    1. expect_doc 为空字符串 → 这是「负例」（知识库本来就不该有答案）
-       只有 hits 为空才算命中；如果检索出了任何文档，算失败（说明阈值没挡住噪音）
-    2. expect_doc 非空 → 返回的前 3 条里，只要有任意一条的 doc_id == expect_doc，就算命中
-
-    返回 True/False。
-
-    ====== 下面这 6 行归你写 ======
-
-    # 提示：
-    #   负例分支：if not expect_doc: return len(hits) == 0
-    #   正例分支：遍历 hits，看 h["doc_id"] 是否等于 expect_doc
-    #   doc_id 形如 "03-退货运费规则"
-
-    ================================
+    1. expect_docs 为空 → 负例：只有 hits 为空才算命中
+    2. expect_docs 非空 → 返回的结果里，只要有任意一条的 doc_id 在 expect_docs 里，就算命中
     """
-    if not expect_doc:
-        if not hits:
-            return True
-        else:
-            return False
-    else:
-        for hit in hits:
-            if hit["doc_id"] == expect_doc:
-                return True
-    return False
+    if not expect_docs:                    # 负例
+        return not hits
+    return any(h["doc_id"] in expect_docs for h in hits)
 
 
 async def main() -> None:
-    cases = [json.loads(line) for line in CASES_FILE.read_text(encoding="utf-8").splitlines() if line.strip()]
+    cases = []
+    for line in CASES_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        case = json.loads(line)
+        # 兼容两种写法：字符串 或 字符串数组，统一成数组
+        # 注意：空字符串要变成空数组（否则 [""] 会被当成"有期望文档"）
+        exp = case.get("expect_doc", [])
+        if isinstance(exp, str):
+            exp = [exp] if exp.strip() else []
+        case["expect_docs"] = exp
+        cases.append(case)
 
     passed = 0
     failed: list[dict] = []
 
-    print(f"{'ID':<4}{'命中':<6}{'问题':<28}期望文档")
-    print("-" * 78)
+    print(f"{'ID':<4}{'命中':<6}{'问题':<34}期望文档")
+    print("-" * 88)
 
     for case in cases:
         hits = await search_knowledge(case["question"])
-        ok = is_hit(hits, case["expect_doc"])
+        ok = is_hit(hits, case["expect_docs"])
         passed += int(ok)
 
         mark = "✅" if ok else "❌"
-        print(f"{case['id']:<4}{mark:<6}{case['question']:<28}{case['expect_doc'] or '（负例）'}")
+        expect_text = "、".join(case["expect_docs"]) if case["expect_docs"] else "（负例）"
+        print(f"{case['id']:<4}{mark:<6}{case['question']:<34}{expect_text}")
 
         if not ok:
             failed.append({
@@ -77,14 +76,14 @@ async def main() -> None:
 
     total = len(cases)
     rate = passed / total * 100
-    print("-" * 78)
+    print("-" * 88)
     print(f"召回率：{passed}/{total} = {rate:.0f}%")
 
     if failed:
         print("\n失败用例：")
         for f in failed:
             print(f"\n  #{f['case']['id']} {f['case']['question']}")
-            print(f"    期望: {f['case']['expect_doc'] or '（应为空）'}")
+            print(f"    期望: {'、'.join(f['case']['expect_docs']) or '（应为空）'}")
             print(f"    实际: {f['top_titles'] or '（空）'}")
 
     if rate < 80:

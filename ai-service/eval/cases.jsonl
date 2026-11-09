@@ -5,6 +5,16 @@
 {"id": 5, "question": "多久才能发货？", "expect_doc": "10-发货时效", "expect_points": ["48小时"]}
 {"id": 6, "question": "新疆要加运费吗？", "expect_doc": "11-配送范围与运费", "expect_points": ["偏远附加费"]}
 {"id": 7, "question": "快递显示已签收但我实际没收到怎么办？", "expect_doc": "12-物流查询", "expect_points": ["联系快递员", "平台介入"]}
-{"id": 8, "question": "如果商品有问题，退货运费谁承担？", "expect_doc": "05-质量问题处理", "expect_points": ["商家承担"]}
+{"id": 8, "question": "如果商品有问题，退货运费谁承担？", "expect_doc": ["03-退货运费规则", "05-质量问题处理"], "expect_points": ["商家承担"]}
 {"id": 9, "question": "你们老板是谁？", "expect_doc": "", "expect_points": []}
 {"id": 10, "question": "今天天气怎么样？", "expect_doc": "", "expect_points": []}
+{"id": 11, "question": "东西不想要了，寄回去的邮费算谁的？", "expect_doc": ["03-退货运费规则"], "expect_points": ["买家承担"]}
+{"id": 12, "question": "买错了能退么？", "expect_doc": ["02-七天无理由退货", "01-退换货总则"], "expect_points": ["7天", "无理由"]}
+{"id": 13, "question": "退款一般几天能到账？", "expect_doc": ["06-退款时效"], "expect_points": ["1~3个工作日", "余额实时"]}
+{"id": 14, "question": "发票抬头写错了还能改吗？", "expect_doc": ["09-发票申请"], "expect_points": ["不支持修改"]}
+{"id": 15, "question": "快递放驿站了我一直没去取，东西丢了算谁的？", "expect_doc": ["13-签收注意事项", "12-物流查询"], "expect_points": ["视为已签收", "风险由买家承担"]}
+{"id": 16, "question": "手机已经激活了还能七天无理由吗？", "expect_doc": ["02-七天无理由退货"], "expect_points": ["不支持"]}
+{"id": 17, "question": "满多少钱包邮啊？", "expect_doc": ["11-配送范围与运费"], "expect_points": ["99"]}
+{"id": 18, "question": "尺码不合适能换吗？", "expect_doc": ["04-换货流程", "14-尺码与规格说明"], "expect_points": ["换货"]}
+{"id": 19, "question": "我要找人工客服，怎么转？", "expect_doc": ["15-客服工作时间与转人工"], "expect_points": ["转人工"]}
+{"id": 20, "question": "帮我写一首诗吧", "expect_doc": [], "expect_points": []}
