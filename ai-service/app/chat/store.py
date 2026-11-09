@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS ai_message (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON ai_message(conversation_id, id);
+
+-- D13：工单。AI 不能直接改订单状态，只能「提单」交给人工处理。
+CREATE TABLE IF NOT EXISTS ai_ticket (
+    id              BIGSERIAL PRIMARY KEY,
+    conversation_id UUID NOT NULL,
+    user_id         BIGINT NOT NULL,
+    order_id        VARCHAR(32),
+    reason          TEXT NOT NULL,
+    status          SMALLINT NOT NULL DEFAULT 1,   -- 1 待处理 2 已处理 3 已关闭
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_user ON ai_ticket(user_id, created_at DESC);
 """
 
 
@@ -100,3 +112,45 @@ def list_messages(conversation_id: str, limit: int = 20) -> list[dict]:
             )
             rows = cur.fetchall()
     return [{"role": r[0], "content": r[1], "created_at": r[2].isoformat()} for r in reversed(rows)]
+
+
+# ==================== D13：工单 ====================
+
+def create_ticket(conversation_id: str, user_id: int, reason: str, order_id: str | None = None) -> int:
+    """建一条工单，返回工单号。只有用户确认之后才会被调用。"""
+    with psycopg.connect(settings.pg_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO ai_ticket (conversation_id, user_id, order_id, reason)
+                VALUES (%s, %s, %s, %s) RETURNING id
+                """,
+                (conversation_id, user_id, order_id, reason),
+            )
+            ticket_id = cur.fetchone()[0]
+        conn.commit()
+    return ticket_id
+
+
+def list_tickets(user_id: int, limit: int = 10) -> list[dict]:
+    """查某人最近的工单（前端"我的工单"用）。"""
+    with psycopg.connect(settings.pg_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, order_id, reason, status, created_at FROM ai_ticket
+                WHERE user_id = %s ORDER BY id DESC LIMIT %s
+                """,
+                (user_id, limit),
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "ticket_id": r[0],
+            "order_id": r[1],
+            "reason": r[2],
+            "status": r[3],
+            "created_at": r[4].isoformat(),
+        }
+        for r in rows
+    ]

@@ -12,10 +12,11 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.agent.graph import run_graph
+from app.agent.graph import resume_graph, run_graph
 from app.agent.manual_loop import run_agent
 from app.chat import store
-from app.clients.context import set_user_info
+from app.clients.context import set_conversation_id, set_user_info
+from app.common import rate_limit
 from app.config import settings
 from app.llm import chat_once, chat_stream_text
 
@@ -159,9 +160,8 @@ def ensure_owner(conv: dict, user_id: int) -> None:
     """
     校验会话归属：不是本人的会话，一律拒绝。
     """
-    if not conv["user_id"]==user_id:
+    if conv["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="无权访问该会话")
-# ← 这是占位，替换成你的判断
 
 
 @app.post("/ai/chat")
@@ -176,31 +176,104 @@ async def chat(request: Request, body: ChatIn):
         raise HTTPException(status_code=401, detail="未登录")
     user_id = int(user_info)
 
+    # D13：先限流，再干活。超了直接 429，别浪费模型调用。
+    ok, wait_seconds = rate_limit.allow(user_id)
+    if not ok:
+        raise HTTPException(
+            status_code=429,
+            detail=f"小乐有点忙不过来啦，请 {wait_seconds} 秒后再试～",
+        )
+
     conv_id = body.conversation_id
     if conv_id:
         conv = await asyncio.to_thread(store.get_conversation, conv_id)
         if conv is None:
             raise HTTPException(status_code=404, detail="会话不存在")
-        ensure_owner(conv, user_id)          # ← 你写的那 6 行在这里生效
+        ensure_owner(conv, user_id)
     else:
         conv_id = await asyncio.to_thread(store.create_conversation, user_id)
 
     set_user_info(user_info)
+    set_conversation_id(conv_id)          # 建工单时工具要读它
     started = time.perf_counter()
     # thread_id 拼上用户，保证 A 的会话不可能被 B 的线程读到
     result = await run_graph(body.message, thread_id=f"{user_id}:{conv_id}")
     latency_ms = int((time.perf_counter() - started) * 1000)
 
     await asyncio.to_thread(store.append_message, conv_id, "user", body.message)
+
+    # 图停在 interrupt：不落 assistant 消息，只告诉前端"要弹确认框"
+    if result["interrupt"]:
+        info = result["interrupt"]
+        await asyncio.to_thread(
+            store.append_message, conv_id, "assistant", f"【待确认】{info.get('summary', '')}", latency_ms
+        )
+        return {
+            "ok": True,
+            "status": "need_confirm",
+            "conversation_id": conv_id,
+            "confirm": info,
+            "latency_ms": latency_ms,
+        }
+
     await asyncio.to_thread(store.append_message, conv_id, "assistant", result["answer"], latency_ms)
 
     return {
         "ok": True,
+        "status": "done",
         "conversation_id": conv_id,
         "answer": result["answer"],
         "latency_ms": latency_ms,
         "message_count": result["message_count"],
     }
+
+
+class ConfirmIn(BaseModel):
+    conversation_id: str
+    approved: bool          # true = 确认创建，false = 取消
+
+
+@app.post("/ai/chat/confirm")
+async def chat_confirm(request: Request, body: ConfirmIn):
+    """用户点了确认/取消之后调这里，让暂停中的图继续跑完。"""
+    user_info = request.headers.get("user-info")
+    if not user_info:
+        raise HTTPException(status_code=401, detail="未登录")
+    user_id = int(user_info)
+
+    conv = await asyncio.to_thread(store.get_conversation, body.conversation_id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    ensure_owner(conv, user_id)
+
+    set_user_info(user_info)
+    set_conversation_id(body.conversation_id)
+    started = time.perf_counter()
+    result = await resume_graph(body.approved, thread_id=f"{user_id}:{body.conversation_id}")
+    latency_ms = int((time.perf_counter() - started) * 1000)
+
+    await asyncio.to_thread(store.append_message, body.conversation_id, "user",
+                            "确认" if body.approved else "取消")
+    await asyncio.to_thread(store.append_message, body.conversation_id, "assistant",
+                            result["answer"], latency_ms)
+
+    return {
+        "ok": True,
+        "status": "done",
+        "conversation_id": body.conversation_id,
+        "answer": result["answer"],
+        "latency_ms": latency_ms,
+    }
+
+
+@app.get("/ai/tickets")
+async def my_tickets(request: Request, limit: int = Query(10, ge=1, le=50)):
+    """我的工单列表（做题/演示用，确认工单真的落库了）。"""
+    user_info = request.headers.get("user-info")
+    if not user_info:
+        raise HTTPException(status_code=401, detail="未登录")
+    tickets = await asyncio.to_thread(store.list_tickets, int(user_info), limit)
+    return {"user_id": int(user_info), "count": len(tickets), "tickets": tickets}
 
 
 @app.get("/ai/conversations/{conversation_id}/messages")

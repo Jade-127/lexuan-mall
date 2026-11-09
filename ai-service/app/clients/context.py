@@ -10,6 +10,7 @@
 from contextvars import ContextVar
 
 _user_info: ContextVar[str | None] = ContextVar("user_info", default=None)
+_conv_id: ContextVar[str | None] = ContextVar("conversation_id", default=None)
 
 
 def set_user_info(value: str | None) -> None:
@@ -20,3 +21,13 @@ def set_user_info(value: str | None) -> None:
 def get_user_info() -> str | None:
     """工具内部调用：取出当前用户标识；没有登录就是 None。"""
     return _user_info.get()
+
+
+def set_conversation_id(value: str | None) -> None:
+    """路由入口调用：把当前会话 id 存进上下文（D13 建工单时要用）。"""
+    _conv_id.set(value)
+
+
+def get_conversation_id() -> str | None:
+    """工具内部调用：取出当前会话 id。"""
+    return _conv_id.get()

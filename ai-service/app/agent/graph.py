@@ -16,18 +16,28 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.types import Command
 from psycopg_pool import AsyncConnectionPool
 
 from app.config import settings
-from app.tools.shop_tools import get_order_detail, query_my_orders, search_items, search_knowledge
+from app.tools.shop_tools import (
+    create_ticket,
+    get_order_detail,
+    query_my_orders,
+    search_items,
+    search_knowledge,
+)
 
-TOOLS = [search_items, query_my_orders, get_order_detail, search_knowledge]
+TOOLS = [search_items, query_my_orders, get_order_detail, search_knowledge, create_ticket]
 
 SYSTEM = (
     "你是乐选优品的在线客服「小乐」。"
     "回答问题优先使用工具提供的事实，不要编造订单号、价格、库存、物流、政策。"
     "工具没返回的信息就说不知道。"
     "回答简洁：默认不超过 80 字，先给结论。"
+    "订单状态、物流、价格这类会变的信息，每次都要重新调工具查，不要用上下文里的旧答案。"
+    "create_ticket 是写操作：只在用户明确要转人工/投诉/申请售后时调用，调用前先说一句你要做什么；"
+    "用户取消后不要再重复调用同一个工单。"
 )
 
 _graph = None
@@ -87,6 +97,36 @@ async def get_graph():
     return _graph
 
 
+def _payload(result: dict) -> dict:
+    """把图跑完（或跑到一半暂停）的结果整理成接口要的形状。"""
+    messages = result["messages"]
+    trace = []
+    for msg in messages:
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            for call in msg.tool_calls:
+                trace.append({"tool": call["name"], "args": call["args"]})
+        elif isinstance(msg, ToolMessage):
+            trace.append({"tool_result": str(msg.content)[:160]})
+
+    # 图停在 interrupt 时，结果里会多出一个 __interrupt__ 键，
+    # 里面是工具传给 interrupt() 的那个 dict（告诉前端要确认什么）。
+    interrupts = result.get("__interrupt__") or ()
+    if interrupts:
+        return {
+            "answer": None,
+            "interrupt": interrupts[0].value,
+            "message_count": len(messages),
+            "trace": trace,
+        }
+
+    return {
+        "answer": messages[-1].content,
+        "interrupt": None,
+        "message_count": len(messages),
+        "trace": trace,
+    }
+
+
 async def run_graph(question: str, thread_id: str | None = None) -> dict:
     """跑一次图。
 
@@ -102,19 +142,16 @@ async def run_graph(question: str, thread_id: str | None = None) -> dict:
         {"messages": [HumanMessage(content=question)]},
         config=config,
     )
+    return _payload(result)
 
-    messages = result["messages"]
-    trace = []
-    for msg in messages:
-        if isinstance(msg, AIMessage) and msg.tool_calls:
-            for call in msg.tool_calls:
-                trace.append({"tool": call["name"], "args": call["args"]})
-        elif isinstance(msg, ToolMessage):
-            trace.append({"tool_result": str(msg.content)[:160]})
 
-    final = messages[-1]
-    return {
-        "answer": final.content,
-        "message_count": len(messages),
-        "trace": trace,
-    }
+async def resume_graph(decision: bool, thread_id: str) -> dict:
+    """用户点了确认/取消之后，把图从暂停的地方接着跑。
+
+    Command(resume=...) 里的值，就是工具里 interrupt() 这一行的返回值。
+    必须用同一个 thread_id，否则 checkpointer 找不到那段暂停中的状态。
+    """
+    graph = await get_graph()
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 10}
+    result = await graph.ainvoke(Command(resume=decision), config=config)
+    return _payload(result)

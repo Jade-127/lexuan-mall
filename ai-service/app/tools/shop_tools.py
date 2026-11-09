@@ -7,12 +7,15 @@
 注意所有 @tool 函数都是 async 的：ToolNode 在异步图里会自动 await，
 这样调 Java 接口时不会阻塞事件循环。
 """
+import asyncio
 import json
 
 from langchain_core.tools import tool
+from langgraph.types import interrupt
 
+from app.chat import store
 from app.clients import item_client, trade_client
-from app.clients.context import get_user_info
+from app.clients.context import get_conversation_id, get_user_info
 from app.common.tool_log import tool_span
 from app.rag.retriever import search_knowledge as search_knowledge_docs
 
@@ -101,3 +104,43 @@ async def search_knowledge(question: str) -> str:
 
         docs = [{"title": h["title"], "content": h["content"], "score": round(h["score"], 3)} for h in hits]
         return json.dumps({"found": len(docs), "docs": docs}, ensure_ascii=False)
+
+
+@tool
+async def create_ticket(reason: str, order_id: str | None = None) -> str:
+    """为用户创建售后/人工工单，会有真人客服跟进处理。
+
+    这是「写操作」，会先让用户在界面上点确认，同意之后才真正落库。
+    什么时候用：用户要转人工、要投诉、要申请售后处理，而知识库和订单工具没法直接解决时。
+    不要用于：普通咨询、查订单、找商品。
+
+    reason 写清楚要处理什么（如"申请退货：商品破损"）；order_id 有就给，没有传 null。
+    """
+    with tool_span("create_ticket", {"reason": reason, "order_id": order_id}) as span:
+        # 关键：interrupt 放最前面，它前面不要写任何"有副作用"的代码。
+        # 因为用户确认后，这个工具函数会从头再跑一遍（interrupt 这次直接返回用户的选择），
+        # 放在它前面的写库/发消息会被执行两次。
+        decision = interrupt({
+            "action": "create_ticket",
+            "title": "需要你确认",
+            "summary": f"为你创建售后工单：{reason}",
+            "order_id": order_id,
+        })
+
+        # 用户点了什么，就是 interrupt() 的返回值。
+        if not decision:
+            return json.dumps({"created": False, "message": "好的，已取消，没有创建工单"}, ensure_ascii=False)
+
+        # 只有用户同意后才走到这里，而且 user_id 来自服务端上下文，模型改不了
+        conv_id = get_conversation_id()
+        user_id = int(get_user_info())
+        ticket_id = await asyncio.to_thread(store.create_ticket, conv_id, user_id, reason, order_id)
+
+        return json.dumps(
+            {
+                "created": True,
+                "ticket_id": ticket_id,
+                "message": f"已创建工单 {ticket_id}，客服会在 24 小时内联系你",
+            },
+            ensure_ascii=False,
+        )
