@@ -4,17 +4,20 @@ D1：/health
 D2：/ai/ping —— 第一次真正调用大模型，并验证「控长」的三个开关
 D3：/ai/chat/stream —— SSE 流式输出，接通网关后即可被前端消费
 """
+import asyncio
 import json
 import time
 
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
+from app.agent.graph import run_graph
 from app.agent.manual_loop import run_agent
+from app.chat import store
 from app.clients.context import set_user_info
 from app.config import settings
 from app.llm import chat_once, chat_stream_text
-from app.agent.graph import run_graph
 
 app = FastAPI(
     title="乐选优品 · 智能客服 Agent",
@@ -140,3 +143,77 @@ async def agent_graph(request: Request, q: str = Query(..., description="测试�
     set_user_info(request.headers.get("user-info"))
     result = await run_graph(q)
     return {"ok": True, "question": q, **result}
+
+
+# ==================== D12：带多轮记忆的会话接口 ====================
+
+store.init_schema()      # 建 ai_conversation / ai_message（幂等）
+
+
+class ChatIn(BaseModel):
+    conversation_id: str | None = None      # 不传 = 新建会话
+    message: str
+
+
+def ensure_owner(conv: dict, user_id: int) -> None:
+    """
+    校验会话归属：不是本人的会话，一律拒绝。
+    """
+    if not conv["user_id"]==user_id:
+        raise HTTPException(status_code=403, detail="无权访问该会话")
+# ← 这是占位，替换成你的判断
+
+
+@app.post("/ai/chat")
+async def chat(request: Request, body: ChatIn):
+    """带多轮记忆的对话。
+
+    - 不传 conversation_id：新建会话，返回 id
+    - 传了：校验归属 → 恢复该会话的历史 → 继续对话
+    """
+    user_info = request.headers.get("user-info")
+    if not user_info:
+        raise HTTPException(status_code=401, detail="未登录")
+    user_id = int(user_info)
+
+    conv_id = body.conversation_id
+    if conv_id:
+        conv = await asyncio.to_thread(store.get_conversation, conv_id)
+        if conv is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        ensure_owner(conv, user_id)          # ← 你写的那 6 行在这里生效
+    else:
+        conv_id = await asyncio.to_thread(store.create_conversation, user_id)
+
+    set_user_info(user_info)
+    started = time.perf_counter()
+    # thread_id 拼上用户，保证 A 的会话不可能被 B 的线程读到
+    result = await run_graph(body.message, thread_id=f"{user_id}:{conv_id}")
+    latency_ms = int((time.perf_counter() - started) * 1000)
+
+    await asyncio.to_thread(store.append_message, conv_id, "user", body.message)
+    await asyncio.to_thread(store.append_message, conv_id, "assistant", result["answer"], latency_ms)
+
+    return {
+        "ok": True,
+        "conversation_id": conv_id,
+        "answer": result["answer"],
+        "latency_ms": latency_ms,
+        "message_count": result["message_count"],
+    }
+
+
+@app.get("/ai/conversations/{conversation_id}/messages")
+async def conversation_messages(conversation_id: str, request: Request):
+    """查看会话消息（前端渲染历史用），同样要校验归属。"""
+    user_info = request.headers.get("user-info")
+    if not user_info:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    conv = await asyncio.to_thread(store.get_conversation, conversation_id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    ensure_owner(conv, int(user_info))
+
+    messages = await asyncio.to_thread(store.list_messages, conversation_id)
+    return {"conversation_id": conversation_id, "messages": messages}
