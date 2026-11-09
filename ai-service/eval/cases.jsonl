@@ -1,0 +1,10 @@
+{"id": 1, "question": "退货的运费谁出？", "expect_doc": "03-退货运费规则", "expect_points": ["买家原因买家承担", "商家原因商家承担", "运费险赔付"]}
+{"id": 2, "question": "无理由退货是从哪天开始算的？", "expect_doc": "02-七天无理由退货", "expect_points": ["签收时间", "第7天"]}
+{"id": 3, "question": "能不能开发票", "expect_doc": "09-发票申请", "expect_points": ["电子发票", "30天"]}
+{"id": 4, "question": "怎么支付？", "expect_doc": "07-支付方式说明", "expect_points": ["余额", "支付宝", "微信"]}
+{"id": 5, "question": "多久才能发货？", "expect_doc": "10-发货时效", "expect_points": ["48小时"]}
+{"id": 6, "question": "新疆要加运费吗？", "expect_doc": "11-配送范围与运费", "expect_points": ["偏远附加费"]}
+{"id": 7, "question": "快递显示已签收但我实际没收到怎么办？", "expect_doc": "12-物流查询", "expect_points": ["联系快递员", "平台介入"]}
+{"id": 8, "question": "如果商品有问题，退货运费谁承担？", "expect_doc": "05-质量问题处理", "expect_points": ["商家承担"]}
+{"id": 9, "question": "你们老板是谁？", "expect_doc": "", "expect_points": []}
+{"id": 10, "question": "今天天气怎么样？", "expect_doc": "", "expect_points": []}
