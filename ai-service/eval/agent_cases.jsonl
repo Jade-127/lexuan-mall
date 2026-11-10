@@ -1,0 +1,30 @@
+{"id": "P01", "category": "售前", "question": "有没有蓝牙耳机", "expect_tools": ["search_items"], "expect_keywords": ["耳机"], "must_not_call": ["create_ticket"]}
+{"id": "P02", "category": "售前", "question": "300 元以内的手机推荐一下", "expect_tools": ["search_items"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P03", "category": "售前", "question": "OPPO 的手机多少钱", "expect_tools": ["search_items"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P04", "category": "售前", "question": "能开发票吗", "expect_tools": ["search_knowledge"], "expect_keywords": ["发票"], "must_not_call": ["create_ticket"]}
+{"id": "P05", "category": "售前", "question": "支持哪些支付方式", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P06", "category": "售前", "question": "发什么快递，一般多久能到", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P07", "category": "售前", "question": "新疆发货吗，要加运费吗", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P08", "category": "售前", "question": "衣服尺码怎么选", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P09", "category": "售前", "question": "荣耀8X 现在有货吗", "expect_tools": ["search_items"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "P10", "category": "售前", "question": "想送个礼物给朋友，有什么推荐", "expect_tools": ["search_items"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S01", "category": "售中", "question": "我的订单到哪了", "expect_tools": ["query_my_orders"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S02", "category": "售中", "question": "我有几笔订单", "expect_tools": ["query_my_orders"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S03", "category": "售中", "question": "订单 2118193045389615106 现在是什么状态", "expect_tools": ["get_order_detail"], "expect_keywords": ["已发货"], "must_not_call": ["create_ticket"]}
+{"id": "S04", "category": "售中", "question": "订单 2118193045389615106 花了多少钱", "expect_tools": ["get_order_detail"], "expect_keywords": ["181"], "must_not_call": ["create_ticket"]}
+{"id": "S05", "category": "售中", "question": "哪些订单还没付款", "expect_tools": ["query_my_orders"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S06", "category": "售中", "question": "怎么取消订单", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S07", "category": "售中", "question": "物流信息怎么查", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S08", "category": "售中", "question": "一般下单后多久发货", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S09", "category": "售中", "question": "订单 9999999999 到哪了", "expect_tools": ["get_order_detail"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "S10", "category": "售中", "question": "订单 2118193045389615106 的收货人是谁", "expect_tools": ["get_order_detail"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "A01", "category": "售后", "question": "退货的运费谁出", "expect_tools": ["search_knowledge"], "expect_keywords": ["运费"], "must_not_call": ["create_ticket"]}
+{"id": "A02", "category": "售后", "question": "无理由退货是从哪天开始算的", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "A03", "category": "售后", "question": "商品破损了怎么处理", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "A04", "category": "售后", "question": "退款多久能到账", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "A05", "category": "售后", "question": "换货怎么操作", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "A06", "category": "售后", "question": "发票丢了能补开吗", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": ["create_ticket"]}
+{"id": "A07", "category": "售后", "question": "你们客服几点下班，怎么转人工", "expect_tools": ["search_knowledge"], "expect_keywords": [], "must_not_call": []}
+{"id": "A08", "category": "售后", "question": "订单 2118193045389615106 商品破损了，我要退货", "expect_tools": ["create_ticket"], "expect_keywords": [], "expect_confirm": true}
+{"id": "A09", "category": "售后", "question": "今天北京天气怎么样", "expect_tools": [], "expect_keywords": [], "must_not_call": ["search_items", "query_my_orders", "get_order_detail", "search_knowledge", "create_ticket"]}
+{"id": "A10", "category": "售后", "question": "给我讲个笑话", "expect_tools": [], "expect_keywords": [], "must_not_call": ["search_items", "query_my_orders", "get_order_detail", "search_knowledge", "create_ticket"]}
