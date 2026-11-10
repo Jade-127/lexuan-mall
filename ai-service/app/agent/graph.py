@@ -87,6 +87,16 @@ def call_model(state: MessagesState) -> dict:
     if not messages or not isinstance(messages[0], SystemMessage):
         messages = [SystemMessage(content=SYSTEM)] + list(messages)
     ai_msg = _model().invoke(messages)
+
+    # D17：记 token 消耗。一次对话会调好几轮模型，所以每轮都要记，
+    # 最后按 trace_id 求和才是"这一单"的成本。
+    usage = getattr(ai_msg, "usage_metadata", None) or {}
+    if usage:
+        trace.event(
+            "llm.call",
+            in_tokens=usage.get("input_tokens", 0),
+            out_tokens=usage.get("output_tokens", 0),
+        )
     return {"messages": [ai_msg]}
 
 

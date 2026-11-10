@@ -118,3 +118,48 @@ uvicorn app.main:app --reload --port 8087
 | P2 | 知识库 RAG + 转人工 | ⏳ |
 | P3 | 多轮记忆 + 前端聊天页 | ⏳ |
 | P4 | 评测 + 可观测 | ⏳ |
+
+---
+
+## 效果与指标（实测，2026-11-10）
+
+| 指标 | 结果 | 怎么测的 |
+|---|---|---|
+| 评测集工具选择准确率 | **93%**（28/30） | `eval/run_eval.py`，售前 / 售中 / 售后各 10 条 |
+| 关键信息命中率 | **100%**（5/5） | 同上：回答里必须出现指定关键词（状态、金额等） |
+| 知识库召回率 | **100%**（20/20） | `eval/harness.py`，top-3 命中判定 |
+| 工具调用成功率 | **94%**（158/169） | `scripts/tool_stats.py`，汇总真实调用日志 |
+| 响应延迟 | 平均 **2.9s**，P95 **5.3s** | 30 条评测集逐条计时 |
+| 单轮成本 | **¥0.0022**（输入 2571 / 输出 65 token） | `scripts/cost_report.py`，日活 1000 次 ≈ ¥2.2/天 |
+
+> 口径说明：准确率是单轮结果，「退货建单」这条用例在前几轮有波动，多轮平均约 93%，因此不写 100%；
+> 成本按 qwen-plus 公开价估算（输入 0.8 元/百万 token、输出 2 元/百万 token），实际以控制台账单为准。
+
+### 怎么复现
+
+```powershell
+cd ai-service
+.\.venv\Scripts\python.exe eval\run_eval.py            # 端到端评测 → eval/report.md
+.\.venv\Scripts\python.exe eval\harness.py             # 检索召回率
+.\.venv\Scripts\python.exe scripts\tool_stats.py       # 工具调用统计
+.\.venv\Scripts\python.exe scripts\cost_report.py      # 单轮成本
+.\.venv\Scripts\python.exe scripts\trace_show.py <id>  # 回放一次请求的链路
+```
+
+### 可观测性
+
+每次对话生成一个 `trace_id`，贯穿「前置检索 → 模型调用 → 工具执行 → 落库」：
+
+```
++    0ms   api.chat.start
++  600ms   prefetch.knowledge     hit=3  top=退货运费规则
++ 2099ms   graph.run              ms=2079  tool_calls=['search_knowledge']
++ 2099ms   api.chat.end           ms=2098  status=done
+```
+
+- `GET /ai/traces/{trace_id}` 回放整条链路；`logs/traces.jsonl` 本地留存
+- 需要更细的分析时，`.env` 里打开 `LANGSMITH_TRACING=true` 即可接入 LangSmith（业务代码零改动）
+
+### 已知问题
+
+- （玉安补 2–3 条：开发中踩过的坑 / 还没解决的问题）
