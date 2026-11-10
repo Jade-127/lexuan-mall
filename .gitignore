@@ -39,3 +39,11 @@ pgdata/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---------- 个人文档（不入库） ----------
+ai-service/docs/02-*
+ai-service/docs/学习*
+ai-service/docs/简历*
+
+# ---------- 前端静态资源（nginx 二进制 + 课程前端资源，不入库） ----------
+hmall-nginx/

@@ -1,4 +1,4 @@
-"""LangGraph 版 Agent（D12：多轮记忆）。
+"""LangGraph 版 Agent（多轮记忆）。
 
 D5 的图是无状态的；D12 挂上 checkpointer + thread_id，图会把每步 state
 存进 Postgres，下次同 thread_id 进来接着跑。
@@ -74,7 +74,7 @@ def _model():
         model=settings.chat_model,
         api_key=settings.dashscope_api_key,
         base_url=settings.openai_base_url,
-        temperature=0.3,
+        temperature=0.1,   # 工具选择要稳，不要发挥
         max_tokens=500,
         timeout=30,
     )
@@ -88,7 +88,7 @@ def call_model(state: MessagesState) -> dict:
         messages = [SystemMessage(content=SYSTEM)] + list(messages)
     ai_msg = _model().invoke(messages)
 
-    # D17：记 token 消耗。一次对话会调好几轮模型，所以每轮都要记，
+    # 记 token 消耗。一次对话会调好几轮模型，所以每轮都要记，
     # 最后按 trace_id 求和才是"这一单"的成本。
     usage = getattr(ai_msg, "usage_metadata", None) or {}
     if usage:

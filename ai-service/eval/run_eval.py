@@ -1,4 +1,4 @@
-"""端到端评测（D15）：测的是「整条 Agent 链路」，不是单个函数。
+"""端到端评测：测的是「整条 Agent 链路」，不是单个函数。
 
 和 D11 的 harness.py 区别：
     harness.py  只测检索：给问题，看能不能召回对的政策文档
@@ -119,7 +119,7 @@ def write_report(results: list[dict], tool_acc: float, kw_acc: float) -> None:
     p95 = int(sorted(latencies)[int(len(latencies) * 0.95) - 1]) if latencies else 0
 
     lines = [
-        "# 评测报告（D15）",
+        "# 评测报告",
         "",
         f"- 用例数：{len(results)}",
         f"- 工具选择准确率：**{tool_acc:.0%}**",

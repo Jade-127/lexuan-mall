@@ -1,4 +1,4 @@
-"""单轮成本统计（D17）。
+"""单轮成本统计。
 
 数据来源：logs/traces.jsonl 里 call_model 记的 llm.call 事件（每轮模型调用记一次）。
 

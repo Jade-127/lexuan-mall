@@ -1,4 +1,4 @@
-"""会话与消息的业务存储（D12）。
+"""会话与消息的业务存储。
 
 和 LangGraph 的 checkpointer 是两层：
 - checkpointer（PostgresSaver 自建的表）：存图的完整状态快照，给机器续跑用
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS ai_message (
 );
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON ai_message(conversation_id, id);
 
--- D13：工单。AI 不能直接改订单状态，只能「提单」交给人工处理。
+-- 工单。AI 不能直接改订单状态，只能「提单」交给人工处理。
 CREATE TABLE IF NOT EXISTS ai_ticket (
     id              BIGSERIAL PRIMARY KEY,
     conversation_id UUID NOT NULL,
@@ -114,7 +114,7 @@ def list_messages(conversation_id: str, limit: int = 20) -> list[dict]:
     return [{"role": r[0], "content": r[1], "created_at": r[2].isoformat()} for r in reversed(rows)]
 
 
-# ==================== D13：工单 ====================
+# ==================== 工单 ====================
 
 def create_ticket(conversation_id: str, user_id: int, reason: str, order_id: str | None = None) -> int:
     """建一条工单，返回工单号。只有用户确认之后才会被调用。"""

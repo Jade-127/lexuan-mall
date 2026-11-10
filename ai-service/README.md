@@ -1,62 +1,88 @@
-# ai-service · 乐选优品 · 智能客服 Agent
+# ai-service · 智能客服 Agent
 
-hmall 电商项目中的 AI 能力模块（Python / FastAPI / LangGraph / 阿里云百炼）。
+电商系统里的 AI 客服模块，以独立 Python 服务运行，经网关 `/ai/**` 对外暴露。
 
-> 位置：`D:\WorkSpace\hmall\ai-service`
-> 说明：这是 hmall 仓库里的一个非 Maven 模块。Maven 只会构建根 `pom.xml` 里 `<modules>` 声明的模块，这个目录没有 `pom.xml`，所以**不会参与 Java 构建**，两边互不影响。
+- **技术栈**：Python 3.11 · FastAPI · LangGraph · LangChain · 阿里云百炼（qwen-plus / text-embedding-v3）· PostgreSQL + pgvector
+- **定位**：不是 Maven 模块（没有 `pom.xml`），与 Java 侧通过网关和 HTTP 接口解耦，互不影响构建
 
-## 文档
+## 能力
 
-| 文档 | 说明 |
+| 能力 | 实现 |
 |---|---|
-| [docs/01-设计文档.md](docs/01-设计文档.md) | 架构、接口契约、数据模型、Agent/工具设计、RAG、安全、里程碑 |
-| [docs/02-学习计划.md](docs/02-学习计划.md) | 知识点清单 + 20 个工作日排期 + 奖励 |
-| [docs/学习计划打卡板.html](docs/学习计划打卡板.html) | 可视化进度看板（浏览器打开，可打勾） |
+| 工具调用 | 商品检索 / 我的订单 / 订单详情 / 售后政策 RAG / 创建工单（LangGraph `ToolNode`） |
+| 多轮记忆 | `AsyncPostgresSaver`，`thread_id = 用户:会话`，重启不丢 |
+| 写操作确认 | 工具内 `interrupt()` 暂停，前端确认后 `Command(resume=...)` 续跑 |
+| 安全边界 | userId 由服务端上下文注入（不进模型）、会话归属校验、每用户滑窗限流 |
+| 前置检索 | 政策/商品类问题命中关键词时先查库，结果作为「已完成的工具调用」注入 |
+| 可观测性 | `trace_id` 贯穿请求，`GET /ai/traces/{id}` 回放；工具日志 + token 统计 |
 
-## 环境要求
+## 接口
 
-- Python 3.11+（本机 3.11.9；LangGraph 要求 ≥3.10，**不需要 3.13**）
-- 阿里云百炼 API Key
+全部经网关 `/ai/**` 暴露，JWT 由网关校验后以 `user-info` 头透传。
 
-## 快速开始（D1）
-
-```powershell
-cd D:\WorkSpace\hmall\ai-service
-
-# 1. 建虚拟环境
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# 2. 装依赖
-pip install -r requirements.txt
-
-# 3. 准备配置
-copy .env.example .env
-# 打开 .env，把 DASHSCOPE_API_KEY 换成自己的
-
-# 4. 启动
-uvicorn app.main:app --reload --port 8087
-```
-
-浏览器打开 <http://127.0.0.1:8087/health>，看到 `{"status":"ok",...}` 就算 D1 完成。
-接口文档在 <http://127.0.0.1:8087/docs>。
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/health` | 探活 |
+| POST | `/ai/chat` | 对话，返回 `status=done` 或 `need_confirm` |
+| POST | `/ai/chat/confirm` | 确认/取消写操作 |
+| GET | `/ai/tickets` | 我的工单 |
+| GET | `/ai/conversations/{id}/messages` | 会话历史 |
+| GET | `/ai/traces/{trace_id}` | 链路回放 |
 
 ## 目录
 
 ```
 ai-service/
 ├── app/
-│   ├── main.py      FastAPI 入口
-│   └── config.py    环境变量配置
-├── docs/            设计与计划文档
-├── requirements.txt
-└── .env.example
+│   ├── main.py            FastAPI 入口（接口、限流、trace）
+│   ├── config.py          环境变量
+│   ├── agent/graph.py     LangGraph 图：prefetch → agent ⇄ tools
+│   ├── tools/             工具定义（含越权校验、写操作确认）
+│   ├── rag/               知识库检索（pgvector + HNSW）
+│   ├── chat/              会话与工单存储
+│   ├── clients/           调用 Java 服务的 HTTP 客户端 + 请求上下文
+│   └── common/            限流、工具日志、链路追踪
+├── data/knowledge/        售后政策知识库（15 篇 Markdown）
+├── eval/                  评测集与跑批脚本
+├── scripts/               知识库灌入、统计、验收脚本
+└── static/chat.html       独立调试页（正式入口在商城前端）
 ```
 
-后续按设计文档逐步加入 `agent/`、`rag/`、`clients/`、`db/`。
+## 启动
 
-## 与 hmall 的关系
+```powershell
+cd D:\WorkSpace\hmall\ai-service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 
-- 端口：`8087`
-- 网关：`hm-gateway` 增加路由 `/ai/**` → `http://127.0.0.1:8087`，鉴权复用现有 JWT 过滤器，自动透传 `user-info`
-- 数据库：独立的 PostgreSQL（pgvector），不碰业务库 MySQL
+copy .env.example .env      # 填入 DASHSCOPE_API_KEY 和 PG_DSN
+.\.venv\Scripts\python.exe run.py
+```
+
+- 健康检查 <http://127.0.0.1:8087/health>
+- 接口文档 <http://127.0.0.1:8087/docs>
+
+## 验收与统计
+
+```powershell
+.\.venv\Scripts\python.exe eval\run_eval.py       # 30 条端到端评测
+.\.venv\Scripts\python.exe eval\harness.py        # 检索召回率
+.\.venv\Scripts\python.exe scripts\smoke_test.py  # 10 项链路验收
+.\.venv\Scripts\python.exe scripts\tool_stats.py  # 工具调用统计
+.\.venv\Scripts\python.exe scripts\cost_report.py # 单轮成本
+```
+
+指标与口径见根目录 README 的「效果与指标」。
+
+## 链路追踪
+
+默认写本地 `logs/traces.jsonl`，按 `trace_id` 回放。需要可视化时在 `.env` 打开：
+
+```bash
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_xxx
+LANGSMITH_PROJECT=lexuan-agent
+```
+
+业务代码无需改动（LangChain / LangGraph 自动上报）。

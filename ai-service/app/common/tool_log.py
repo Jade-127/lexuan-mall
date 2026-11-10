@@ -1,4 +1,4 @@
-"""工具调用日志（D7）。
+"""工具调用日志。
 
 为什么先用 JSONL 文件而不是数据库：
 1. D8 才起 PostgreSQL，现在没有表可写
@@ -52,7 +52,7 @@ def tool_span(tool_name: str, args: dict | None = None):
         ms = int((time.perf_counter() - started) * 1000)
         _write({
             "ts": datetime.now().isoformat(timespec="seconds"),
-            "trace_id": current_trace(),          # D16：和链路日志串起来
+            "trace_id": current_trace(),          # 和链路日志串起来
             "tool": tool_name,
             "args": args or {},
             "ok": span["error"] is None,
