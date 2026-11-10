@@ -39,7 +39,9 @@ def confirm(token: str, conv: str, approved: bool) -> dict:
 
 
 def tickets(token: str) -> int:
-    return httpx.get(f"{BASE}/api/ai/tickets", headers={"Authorization": token}, timeout=30).json()["count"]
+    # 注意 limit：接口默认只返回最近 10 条，count 会被截断，测试要显式放开
+    r = httpx.get(f"{BASE}/api/ai/tickets?limit=50", headers={"Authorization": token}, timeout=30)
+    return r.json()["count"]
 
 
 def tools(data: dict) -> list[str]:

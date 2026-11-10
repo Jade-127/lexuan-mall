@@ -81,11 +81,26 @@ def _model():
     return llm.bind_tools(TOOLS)
 
 
+# 用户消息里出现订单号 + 售后意图时，本轮必须有建单动作，不靠模型自觉
+ORDER_ID_RE = re.compile(r"\b\d{16,20}\b")
+WRITE_INTENT_RE = re.compile(r"退|换货|退款|报修|投诉|转人工")
+HARD_RULE = (
+    "本轮用户已经提供了订单号并明确要求售后处理。你必须先 get_order_detail 查状态，"
+    "然后调用 create_ticket 创建工单（系统会弹确认卡片），不要只在文字里询问，不要重复问订单号。"
+)
+
+
 def call_model(state: MessagesState) -> dict:
     """agent 节点：把整段历史喂给模型，返回它这一轮的输出。"""
-    messages = state["messages"]
-    if not messages or not isinstance(messages[0], SystemMessage):
-        messages = [SystemMessage(content=SYSTEM)] + list(messages)
+    history = [m for m in state["messages"] if not isinstance(m, SystemMessage)]
+
+    # 兜一层硬约束：模型偶尔只答政策、不调建单工具，这里把要求并进系统提示（只保留一条 system）
+    last_human = next((m for m in reversed(history) if isinstance(m, HumanMessage)), None)
+    text = last_human.content if last_human and isinstance(last_human.content, str) else ""
+    need_write = bool(ORDER_ID_RE.search(text) and WRITE_INTENT_RE.search(text))
+    system_content = SYSTEM + "\n" + HARD_RULE if need_write else SYSTEM
+
+    messages = [SystemMessage(content=system_content)] + history
     ai_msg = _model().invoke(messages)
 
     # 记 token 消耗。一次对话会调好几轮模型，所以每轮都要记，
