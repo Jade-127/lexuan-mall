@@ -7,6 +7,7 @@ D3：/ai/chat/stream —— SSE 流式输出，接通网关后即可被前端消
 import asyncio
 import json
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -17,7 +18,7 @@ from app.agent.graph import resume_graph, run_graph
 from app.agent.manual_loop import run_agent
 from app.chat import store
 from app.clients.context import set_conversation_id, set_user_info
-from app.common import rate_limit
+from app.common import rate_limit, trace
 from app.config import settings
 from app.llm import chat_once, chat_stream_text
 
@@ -199,10 +200,13 @@ async def chat(request: Request, body: ChatIn):
 
     set_user_info(user_info)
     set_conversation_id(conv_id)          # 建工单时工具要读它
+    trace_id = trace.new_trace()          # D16：这条请求一个 trace_id，贯穿到最后
+    trace.event("api.chat.start", user_id=user_id, conv=conv_id[:8], message=body.message[:40])
     started = time.perf_counter()
     # thread_id 拼上用户，保证 A 的会话不可能被 B 的线程读到
     result = await run_graph(body.message, thread_id=f"{user_id}:{conv_id}")
     latency_ms = int((time.perf_counter() - started) * 1000)
+    trace.event("api.chat.end", status="need_confirm" if result["interrupt"] else "done", ms=latency_ms)
 
     await asyncio.to_thread(store.append_message, conv_id, "user", body.message)
 
@@ -218,6 +222,7 @@ async def chat(request: Request, body: ChatIn):
             "conversation_id": conv_id,
             "confirm": info,
             "trace": result.get("trace", []),
+            "trace_id": trace_id,
             "latency_ms": latency_ms,
         }
 
@@ -229,6 +234,7 @@ async def chat(request: Request, body: ChatIn):
         "conversation_id": conv_id,
         "answer": result["answer"],
         "trace": result.get("trace", []),
+        "trace_id": trace_id,
         "latency_ms": latency_ms,
         "message_count": result["message_count"],
     }
@@ -296,3 +302,30 @@ async def conversation_messages(conversation_id: str, request: Request):
 
     messages = await asyncio.to_thread(store.list_messages, conversation_id)
     return {"conversation_id": conversation_id, "messages": messages}
+
+
+# ==================== D16：链路回放 ====================
+
+TRACE_FILE = Path("logs") / "traces.jsonl"
+
+
+@app.get("/ai/traces/{trace_id}")
+async def get_trace(trace_id: str):
+    """按 trace_id 回放一次请求的完整链路（前端调试 / 排查线上问题用）。
+
+    只读本地日志，不需要登录，方便直接 curl：
+        curl http://127.0.0.1:8087/ai/traces/<trace_id>
+    """
+    if not TRACE_FILE.exists():
+        return {"trace_id": trace_id, "count": 0, "events": []}
+
+    events = []
+    for line in TRACE_FILE.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("trace_id") == trace_id:
+            events.append(record)
+
+    total_ms = sum(e.get("ms", 0) for e in events if e.get("stage", "").startswith("graph."))
+    return {"trace_id": trace_id, "count": len(events), "graph_ms": total_ms, "events": events}

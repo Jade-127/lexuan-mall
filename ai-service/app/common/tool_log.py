@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+from app.common.trace import current_trace
+
 LOG_DIR = Path("logs")
 LOG_FILE = LOG_DIR / "tool_calls.jsonl"
 
@@ -50,6 +52,7 @@ def tool_span(tool_name: str, args: dict | None = None):
         ms = int((time.perf_counter() - started) * 1000)
         _write({
             "ts": datetime.now().isoformat(timespec="seconds"),
+            "trace_id": current_trace(),          # D16：和链路日志串起来
             "tool": tool_name,
             "args": args or {},
             "ok": span["error"] is None,

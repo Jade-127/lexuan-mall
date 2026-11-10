@@ -21,6 +21,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Command
 from psycopg_pool import AsyncConnectionPool
 
+from app.common import trace
 from app.config import settings
 from app.rag.retriever import search_knowledge as search_knowledge_docs
 from app.tools.shop_tools import (
@@ -116,7 +117,9 @@ async def prefetch_policy(state: MessagesState) -> dict:
     if POLICY_PAT.search(text):
         hits = await search_knowledge_docs(text)
         if not hits:
+            trace.event("prefetch.knowledge", hit=0)
             return {}
+        trace.event("prefetch.knowledge", hit=len(hits), top=hits[0]["title"])
         payload = json.dumps(
             {"found": len(hits), "docs": [{"title": h["title"], "content": h["content"]} for h in hits]},
             ensure_ascii=False,
@@ -133,6 +136,7 @@ async def prefetch_policy(state: MessagesState) -> dict:
         if price:
             args["max_price"] = int(price.group(1)) * 100      # 元 → 分
         raw = await search_items.ainvoke(args)
+        trace.event("prefetch.items", keyword=item, max_price=args.get("max_price"))
         payload = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
         return _injected_call(call_id, "search_items", args, payload)
 
@@ -239,13 +243,17 @@ async def run_graph(question: str, thread_id: str | None = None) -> dict:
     """
     graph = await get_graph()
     thread_id = thread_id or f"anon-{uuid.uuid4()}"
-    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 10}
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 16}
 
-    result = await graph.ainvoke(
-        {"messages": [HumanMessage(content=question)]},
-        config=config,
-    )
-    return _payload(result)
+    with trace.span("graph.run", thread_id=thread_id[-32:], question=question[:40]) as s:
+        result = await graph.ainvoke(
+            {"messages": [HumanMessage(content=question)]},
+            config=config,
+        )
+        payload = _payload(result)
+        s["tool_calls"] = [t["tool"] for t in payload["trace"] if "tool" in t]
+        s["paused"] = payload["interrupt"] is not None
+    return payload
 
 
 async def resume_graph(decision: bool, thread_id: str) -> dict:
@@ -255,6 +263,9 @@ async def resume_graph(decision: bool, thread_id: str) -> dict:
     必须用同一个 thread_id，否则 checkpointer 找不到那段暂停中的状态。
     """
     graph = await get_graph()
-    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 10}
-    result = await graph.ainvoke(Command(resume=decision), config=config)
-    return _payload(result)
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 16}
+    with trace.span("graph.resume", decision=decision, thread_id=thread_id[-32:]) as s:
+        result = await graph.ainvoke(Command(resume=decision), config=config)
+        payload = _payload(result)
+        s["tool_calls"] = [t["tool"] for t in payload["trace"] if "tool" in t]
+    return payload
