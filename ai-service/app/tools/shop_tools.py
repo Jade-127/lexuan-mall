@@ -106,6 +106,38 @@ async def search_knowledge(question: str) -> str:
         return json.dumps({"found": len(docs), "docs": docs}, ensure_ascii=False)
 
 
+async def _resolve_order(order_id: str | None) -> tuple[str | None, str | None]:
+    """建单前先把「退哪一笔」确定下来。
+
+    为什么放在代码里而不是只靠提示词：
+    模型看到"我要退货"就可能直接建单，但客服根本不知道是哪一单，工单建了也没法处理。
+    这里用代码兜底：没给订单号就查用户自己的订单——
+      0 笔 → 告诉他没订单
+      1 笔 → 直接用这一笔
+      多笔 → 列出前 3 笔，让模型去问用户
+    返回 (确认的订单号, 需要追问用户的话)；第二个不为 None 时就不该继续建单。
+    """
+    if order_id:
+        return str(order_id), None
+
+    data = await trade_client.query_my_orders()
+    orders = (data or {}).get("orders") or []
+    if not orders:
+        return None, "你名下还没有订单，暂时没法创建售后工单。有其他问题我可以帮你查。"
+    if len(orders) == 1:
+        return str(orders[0]["orderId"]), None
+
+    lines = []
+    for o in orders[:3]:
+        fee = o.get("totalFee", 0) or 0
+        lines.append(f"- {o['orderId']}（{o.get('status', '')}，{fee / 100:.2f} 元）")
+    return None, (
+        f"你名下有 {len(orders)} 笔订单，需要先确认是哪一笔：\n"
+        + "\n".join(lines)
+        + "\n请问要处理哪一笔？把订单号发我就行。"
+    )
+
+
 @tool
 async def create_ticket(reason: str, order_id: str | None = None) -> str:
     """为用户创建售后/人工工单，会有真人客服跟进处理。
@@ -114,16 +146,24 @@ async def create_ticket(reason: str, order_id: str | None = None) -> str:
     什么时候用：用户要转人工、要投诉、要申请售后处理，而知识库和订单工具没法直接解决时。
     不要用于：普通咨询、查订单、找商品。
 
-    reason 写清楚要处理什么（如"申请退货：商品破损"）；order_id 有就给，没有传 null。
+    reason 写清楚要处理什么（如"申请退货：商品破损"）；order_id 能确定就传，不确定传 null，
+    工具会帮你去查用户名下的订单并反过来问你。
     """
     with tool_span("create_ticket", {"reason": reason, "order_id": order_id}) as span:
+        # 先确认「退哪一单」。模型很可能在用户只说"我要退货"时就调这个工具，
+        # 这种工单建出来客服也没法处理，所以在代码里兜住：查不到唯一订单就反问用户。
+        order_id, ask = await _resolve_order(order_id)
+        if ask:
+            span["error"] = "NEED_ORDER"
+            return json.dumps({"created": False, "need_user_input": True, "message": ask}, ensure_ascii=False)
+
         # 关键：interrupt 放最前面，它前面不要写任何"有副作用"的代码。
         # 因为用户确认后，这个工具函数会从头再跑一遍（interrupt 这次直接返回用户的选择），
         # 放在它前面的写库/发消息会被执行两次。
         decision = interrupt({
             "action": "create_ticket",
             "title": "需要你确认",
-            "summary": f"为你创建售后工单：{reason}",
+            "summary": f"为你创建售后工单：{reason}（订单 {order_id}）",
             "order_id": order_id,
         })
 

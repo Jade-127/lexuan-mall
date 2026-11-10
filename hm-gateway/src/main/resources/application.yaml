@@ -34,7 +34,16 @@ spring:
           uri: http://127.0.0.1:8087
           predicates:
             - Path=/ai/**
-            -
+      # 跨域：前端在 18080、调试页在 8087，都直连网关 8080
+      # 身份用 Authorization 头（不是 Cookie），所以可以放开 *
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            maxAge: 3600
 hm:
   jwt:
     location: classpath:hmall.jks

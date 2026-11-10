@@ -10,6 +10,7 @@ import time
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.agent.graph import resume_graph, run_graph
@@ -25,6 +26,9 @@ app = FastAPI(
     version="0.3.0",
     description="售前推荐 / 订单查询 / 售后政策问答",
 )
+
+# D14：静态聊天页。页面本身不需要鉴权，真正调接口时带 token 走网关。
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 客服人格：先定「怎么说话」，再谈「说什么」。
 # 这几句话直接决定了回答长度和语气，改 prompt 比改代码有用得多。
@@ -213,6 +217,7 @@ async def chat(request: Request, body: ChatIn):
             "status": "need_confirm",
             "conversation_id": conv_id,
             "confirm": info,
+            "trace": result.get("trace", []),
             "latency_ms": latency_ms,
         }
 
@@ -223,6 +228,7 @@ async def chat(request: Request, body: ChatIn):
         "status": "done",
         "conversation_id": conv_id,
         "answer": result["answer"],
+        "trace": result.get("trace", []),
         "latency_ms": latency_ms,
         "message_count": result["message_count"],
     }

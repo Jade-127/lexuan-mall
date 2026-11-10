@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -27,6 +28,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         //获取请求
         ServerHttpRequest request = exchange.getRequest();
+        //浏览器的跨域预检请求（OPTIONS）不带 token，必须直接放行，否则前端一个请求都发不出去
+        if (HttpMethod.OPTIONS.equals(request.getMethod())) {
+            return chain.filter(exchange);
+        }
         //判断是否拦截
         if(isExclude(request.getPath().toString())){
             return chain.filter(exchange);

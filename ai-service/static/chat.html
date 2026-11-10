@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>乐选优品 · 小乐</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f4f5f7;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app {
+    width: 420px;
+    height: 92vh;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .08);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header {
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #4f7cff, #6f5cff);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header .logo {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(255, 255, 255, .22);
+    display: grid; place-items: center;
+    font-weight: 600;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 12px; opacity: .85; }
+
+  /* ---------- 登录页 ---------- */
+  #login {
+    padding: 40px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #login h2 { font-size: 16px; margin: 0 0 4px; color: #222; }
+  #login input {
+    padding: 11px 13px;
+    border: 1px solid #e3e5ea;
+    border-radius: 10px;
+    font-size: 14px;
+    outline: none;
+  }
+  #login input:focus { border-color: #4f7cff; }
+  #login button {
+    padding: 11px;
+    border: none;
+    border-radius: 10px;
+    background: #4f7cff;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #login button:disabled { background: #b9c4e2; cursor: default; }
+  #login .tip { font-size: 12px; color: #9096a3; line-height: 1.6; }
+  #login .err { font-size: 13px; color: #e0455a; min-height: 18px; }
+
+  /* ---------- 消息区 ---------- */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: #fafbfc;
+  }
+
+  .row { display: flex; gap: 8px; align-items: flex-start; }
+  .row.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 13px; color: #fff; flex: 0 0 30px;
+  }
+  .row.assistant .avatar { background: #6f5cff; }
+  .row.user .avatar { background: #9aa4b8; }
+
+  .bubble {
+    max-width: 78%;
+    padding: 10px 13px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .row.assistant .bubble { background: #fff; border: 1px solid #eceef2; border-top-left-radius: 4px; }
+  .row.user .bubble { background: #4f7cff; color: #fff; border-top-right-radius: 4px; }
+
+  /* 工具调用的小标签 */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    font-size: 11px;
+    color: #5b6b8f;
+    background: #eef2fb;
+    border-radius: 20px;
+    padding: 3px 9px;
+  }
+
+  /* 思考中的三个点 */
+  .dots span {
+    display: inline-block;
+    width: 5px; height: 5px; margin-right: 3px;
+    border-radius: 50%; background: #b3bccd;
+    animation: blink 1.2s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: .2s; }
+  .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+
+  /* ---------- 确认卡片 ---------- */
+  .confirm-card {
+    border: 1px solid #ffd8a8;
+    background: #fffaf2;
+    border-radius: 12px;
+    padding: 12px 14px;
+    max-width: 78%;
+    margin-left: 38px;
+  }
+  .confirm-card .title { font-size: 13px; color: #b26a00; font-weight: 600; margin-bottom: 6px; }
+  .confirm-card .summary { font-size: 14px; color: #333; line-height: 1.6; }
+  .confirm-card .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .confirm-card button {
+    flex: 1; padding: 8px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid transparent;
+  }
+  .confirm-card .ok { background: #4f7cff; color: #fff; }
+  .confirm-card .no { background: #fff; color: #666; border-color: #dcdfe6; }
+
+  /* ---------- 输入区 ---------- */
+  footer {
+    border-top: 1px solid #eceef2;
+    padding: 10px 12px;
+    background: #fff;
+  }
+  .composer { display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    border: 1px solid #e3e5ea;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    max-height: 96px;
+  }
+  .composer textarea:focus { border-color: #4f7cff; }
+  .composer button {
+    width: 56px; height: 40px;
+    border: none; border-radius: 10px;
+    background: #4f7cff; color: #fff; font-size: 14px; cursor: pointer;
+  }
+  .composer button:disabled { background: #b9c4e2; cursor: default; }
+  .hint { font-size: 11px; color: #a8aebb; margin-top: 6px; min-height: 14px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">乐</div>
+    <div>
+      <h1>小乐 · 智能客服</h1>
+      <p id="status">未登录</p>
+    </div>
+  </header>
+
+  <!-- 登录 -->
+  <section id="login">
+    <h2>登录后即可咨询订单</h2>
+    <input id="username" placeholder="用户名（如 jack）" autocomplete="username">
+    <input id="password" type="password" placeholder="密码（如 123）" autocomplete="current-password">
+    <button id="loginBtn">登录</button>
+    <div class="err" id="loginErr"></div>
+    <div class="tip">账号来自黑马商城，登录走网关 /users/login，拿到 JWT 后所有对话请求都带它。</div>
+  </section>
+
+  <!-- 聊天 -->
+  <main id="messages" class="hidden"></main>
+
+  <footer id="composer" class="hidden">
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="问点什么，比如：我的订单到哪了"></textarea>
+      <button id="sendBtn">发送</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </footer>
+</div>
+
+<script>
+// ==================== 配置 ====================
+// 页面在 8087，接口走网关 8080（跨域，网关已配 CORS）
+const API = "http://127.0.0.1:8080";
+
+let token = null;             // 登录后拿到
+let conversationId = null;    // 第一条消息后由后端返回，续聊要用
+
+const $ = (id) => document.getElementById(id);
+
+// ==================== 工具函数（已写好，直接用）====================
+
+/**
+ * 调网关的统一入口。
+ * 自动带 Authorization、自动解析 JSON、把 429/401 的错误变成人话抛出来。
+ */
+async function api(path, { method = "POST", body, auth = true } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (auth && token) headers["Authorization"] = token;
+
+  const res = await fetch(API + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* 401 之类的可能是空响应 */ }
+
+  if (!res.ok) {
+    const msg = (data && data.detail) || (res.status === 401 ? "登录已过期，请重新登录" : `请求失败 (${res.status})`);
+    throw new Error(msg);
+  }
+  return data;
+}
+
+/** 往消息区加一条气泡，返回气泡里那个能写字的元素。 */
+function addBubble(role, text = "") {
+  const row = document.createElement("div");
+  row.className = "row " + role;
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = role === "user" ? "我" : "乐";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+
+  const content = document.createElement("div");
+  content.textContent = text;
+  bubble.appendChild(content);
+
+  row.append(avatar, bubble);
+  $("messages").appendChild(row);
+  scrollToBottom();
+  return content;
+}
+
+/** 打字机：把 text 一个字一个字写进 el，返回 Promise（写完才 resolve）。 */
+function typewriter(el, text, speed = 22) {
+  el.textContent = "";
+  return new Promise((resolve) => {
+    let i = 0;
+    const timer = setInterval(() => {
+      el.textContent += text[i] || "";
+      i++;
+      scrollToBottom();
+      if (i >= text.length) { clearInterval(timer); resolve(); }
+    }, speed);
+  });
+}
+
+/** 正在输入的小气泡（三个点），返回句柄，用来关闭它。 */
+function thinking() {
+  const content = addBubble("assistant", "");
+  content.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+  const row = content.closest(".row");
+  return { close: () => row.remove(), content };
+}
+
+/** 把后端返回的 trace 变成小标签，贴在气泡下面。 */
+const TOOL_LABEL = {
+  search_items: "搜索商品",
+  query_my_orders: "查询订单",
+  get_order_detail: "查订单详情",
+  search_knowledge: "查售后政策",
+  create_ticket: "创建工单",
+};
+
+function renderChips(contentEl, trace) {
+  if (!trace || !trace.length) return;
+  const names = trace.filter((t) => t.tool).map((t) => TOOL_LABEL[t.tool] || t.tool);
+  if (!names.length) return;
+  const box = document.createElement("div");
+  box.className = "chips";
+  [...new Set(names)].forEach((n) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = "⚙ " + n;
+    box.appendChild(chip);
+  });
+  contentEl.closest(".bubble").appendChild(box);
+}
+
+/** 弹确认卡片。用户点按钮后调 onConfirm(true/false)。 */
+function showConfirm(info) {
+  const card = document.createElement("div");
+  card.className = "confirm-card";
+  card.innerHTML = `
+    <div class="title">${info.title || "需要确认"}</div>
+    <div class="summary"></div>
+    <div class="actions">
+      <button class="ok">确认</button>
+      <button class="no">取消</button>
+    </div>`;
+  card.querySelector(".summary").textContent = info.summary || "";
+  card.querySelector(".ok").onclick = () => { card.remove(); onConfirm(true); };
+  card.querySelector(".no").onclick = () => { card.remove(); onConfirm(false); };
+  $("messages").appendChild(card);
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  const box = $("messages");
+  box.scrollTop = box.scrollHeight;
+}
+
+// ==================== 三个主流程：登录 / 发消息 / 确认 ====================
+
+/** 1. 登录：POST /users/login {username, password} → {token, userId, username}
+ *  成功之后：存 token、切界面、打招呼。
+ */
+async function doLogin() {
+  const username = $("username").value.trim();
+  const password = $("password").value;
+  const btn = $("loginBtn");
+  $("loginErr").textContent = "";
+  btn.disabled = true;
+
+  try {
+    // 登录接口在网关白名单里，不需要 token，所以 auth: false
+    const data = await api("/users/login", { auth: false, body: { username, password } });
+
+    token = data.token;                       // 之后所有请求 api() 会自动带上它
+    $("status").textContent = "已登录：" + data.username;
+    $("login").classList.add("hidden");
+    $("messages").classList.remove("hidden");
+    $("composer").classList.remove("hidden");
+    addBubble("assistant", `你好 ${data.username}，我是小乐～想查订单、找商品还是问售后？`);
+    $("input").focus();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** 2. 发消息：一句话发给 Agent，分「普通回答」和「需要确认」两种情况渲染。 */
+async function sendMessage() {
+  const box = $("input");
+  const text = box.value.trim();
+  if (!text) return;
+
+  addBubble("user", text);
+  box.value = "";
+  $("hint").textContent = "";
+  const btn = $("sendBtn");
+  btn.disabled = true;
+  const dots = thinking();                    // 三个点的"正在输入"
+
+  try {
+    const data = await api("/ai/chat", {
+      body: { message: text, conversation_id: conversationId },
+    });
+    conversationId = data.conversation_id;    // 第一次由后端生成，之后续聊要用
+    dots.close();
+
+    if (data.status === "need_confirm") {
+      // 写操作：先说一句，再弹确认卡片，用户点完才真的执行
+      const el = addBubble("assistant", "");
+      await typewriter(el, "这个操作需要你确认一下：");
+      showConfirm(data.confirm);
+      renderChips(el, data.trace);
+    } else {
+      const el = addBubble("assistant", "");
+      await typewriter(el, data.answer || "（这条我没答上来）");
+      renderChips(el, data.trace);
+    }
+  } catch (e) {
+    dots.close();
+    $("hint").textContent = e.message;        // 429 / 401 都在这里显示
+  } finally {
+    btn.disabled = false;
+    box.focus();
+  }
+}
+
+/** 3. 点确认/取消：把选择发回去，让暂停的图继续跑完。 */
+async function onConfirm(approved) {
+  const dots = thinking();
+  try {
+    const data = await api("/ai/chat/confirm", {
+      body: { conversation_id: conversationId, approved },
+    });
+    dots.close();
+    const el = addBubble("assistant", "");
+    await typewriter(el, data.answer || "好的");
+  } catch (e) {
+    dots.close();
+    $("hint").textContent = e.message;
+  }
+}
+
+// ==================== 事件绑定（已写好）====================
+$("loginBtn").onclick = () => doLogin().catch((e) => { $("loginErr").textContent = e.message; });
+$("sendBtn").onclick = () => sendMessage();
+$("input").addEventListener("keydown", (e) => {
+  // 回车发送，Shift+回车换行
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+</script>
+</body>
+</html>
