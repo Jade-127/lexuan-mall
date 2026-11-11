@@ -155,6 +155,7 @@ async def main() -> None:
     results = []
     for case in cases:
         r = await run_case(case)
+        await asyncio.sleep(1)        # 账号有每分钟调用上限，跑批要节流，否则会 429
         results.append(r)
         mark = "✅" if not r["problems"] else "❌ " + "；".join(r["problems"])
         called = ", ".join(r.get("called", [])) or "—"

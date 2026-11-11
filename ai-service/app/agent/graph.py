@@ -22,6 +22,7 @@ from langgraph.types import Command
 from psycopg_pool import AsyncConnectionPool
 
 from app.common import trace
+from app.agent.router import classify
 from app.config import settings
 from app.rag.retriever import search_knowledge as search_knowledge_docs
 from app.tools.shop_tools import (
@@ -35,10 +36,7 @@ from app.tools.shop_tools import (
 TOOLS = [search_items, query_my_orders, get_order_detail, search_knowledge, create_ticket]
 
 # 命中这些词 = 政策类问题，进模型前强制检索（不靠模型自觉）
-POLICY_PAT = re.compile(r"退|换货|运费|退款|发票|发货|配送|包邮|尺码|客服|物流|售后|保修|无理由|时效|快递|支付|取消|破损|质量|签收")
-
 # 商品类问题：命中就先查商品库，别让模型凭印象报型号和价格
-PRODUCT_PAT = re.compile(r"推荐|多少钱|有没有|有货|价格|想买|送人|送朋友|买什么")
 ITEM_WORDS = ["手机", "耳机", "电视", "冰箱", "洗衣机", "空调", "笔记本", "电脑", "平板", "手表", "相机", "衣服", "鞋", "包"]
 PRICE_RE = re.compile(r"(\d+)\s*元")
 
@@ -116,17 +114,22 @@ def call_model(state: MessagesState) -> dict:
 
 
 async def prefetch_policy(state: MessagesState) -> dict:
-    """进模型之前先把「能确定的事实」查出来，当成一次已完成的工具调用塞进历史。
+    """进模型之前先做两件事：判断问题类型，再把能确定的事实查出来。
 
-    两类问题走这条路：
-      - 政策类（退换货/运费/发票…）→ 查知识库
-      - 商品类（推荐/多少钱/有没有…）→ 查商品库
-
-    为什么要有这个节点：
-    D15 评测发现，只靠提示词，三分之一的政策题模型会凭记忆直接答（内容还是它自己编的），
+    为什么需要这个节点：
+    只靠提示词，三分之一的政策题模型会凭记忆直接答（内容还是它自己编的），
     商品推荐也一样——它会报出我们根本没卖的手机型号和价格。
-    与其不停调提示词，不如用图结构保证：命中关键词就先查，模型只能基于查到的事实回答。
-    这就是「确定性流程」补「概率性模型」的短板。
+    与其反复调提示词，不如在流程里保证：先分类，再按类型查库，
+    把结果伪装成「已完成的工具调用」塞进历史，模型只能基于查到的事实回答。
+
+    分类交给小模型（qwen-flash），而不是用它自己的关键词规则——
+    离线 21 条用例上，小模型 21/21，关键词 17/21。
+
+    四类各自怎么走：
+        政策 → 查知识库
+        订单 → 不预查，交给模型自己调 query_my_orders（要结合上下文判断查哪一笔）
+        商品 → 查商品库
+        闲聊 → 什么都不查
     """
     text = ""
     for msg in reversed(state["messages"]):
@@ -136,10 +139,13 @@ async def prefetch_policy(state: MessagesState) -> dict:
     if not text:
         return {}
 
+    category = await classify(text)
+    trace.event("router.classify", category=category, question=text[:30])
+
     call_id = f"prefetch-{uuid.uuid4().hex[:8]}"
 
     # 1) 政策类 → 查知识库
-    if POLICY_PAT.search(text):
+    if category == "政策":
         hits = await search_knowledge_docs(text)
         if not hits:
             trace.event("prefetch.knowledge", hit=0)
@@ -151,11 +157,9 @@ async def prefetch_policy(state: MessagesState) -> dict:
         )
         return _injected_call(call_id, "search_knowledge", {"question": text}, payload)
 
-    # 2) 商品类 → 查商品库（关键词从常识品类里取，预算从"300元"这类说法里取）
-    if PRODUCT_PAT.search(text):
-        item = next((w for w in ITEM_WORDS if w in text), None)
-        if not item:
-            return {}
+    # 2) 商品类 → 查商品库（品类词当关键词，预算从"300元"这类说法里取）
+    if category == "商品":
+        item = next((w for w in ITEM_WORDS if w in text), None) or text[:10]
         price = PRICE_RE.search(text)
         args = {"keyword": item}
         if price:
