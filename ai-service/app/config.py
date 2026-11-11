@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     dashscope_api_key: str = ""
     openai_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     chat_model: str = "qwen-plus"
+    router_model: str = "qwen-flash"      # 意图分类用小模型：快、便宜，不参与答题
     embed_model: str = "text-embedding-v3"
 
     # 服务
