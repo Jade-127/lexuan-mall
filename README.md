@@ -19,22 +19,65 @@
 
 ## 架构
 
+### 整体链路
+
+```mermaid
+flowchart LR
+    B["浏览器<br/>hmall-portal"] -->|"/api/**"| N["nginx :18080"]
+    N --> G["hm-gateway :8080<br/>JWT 鉴权 · 路由"]
+    G --> I["item-service :8081"]
+    G --> C["cart-service :8082"]
+    G --> U["user-service :8084"]
+    G --> T["trade-service :8085"]
+    G --> P["pay-service :8086"]
+    G --> A["ai-service :8087<br/>Python · FastAPI"]
+
+    A --> R["router<br/>qwen-flash 四分类"]
+    R --> L["LangGraph Agent<br/>qwen-plus ReAct"]
+    L --> TL["ToolNode<br/>5 个工具"]
+    TL --> I
+    TL --> T
+    L --> DB[("Postgres<br/>checkpointer")]
+    A --> KB[("pgvector<br/>政策知识库")]
+    A --> LLM["阿里云百炼<br/>对话 + embedding"]
 ```
-浏览器 :18080
-   │
-   ▼
- nginx ──► hm-gateway :8080 ── JWT 校验 ──┬──► item-service   :8081
-                                          ├──► cart-service   :8082
-                                          ├──► user-service   :8084
-                                          ├──► trade-service  :8085
-                                          ├──► pay-service    :8086
-                                          └──► ai-service     :8087 (Python)
-                                                     │
-                                    ┌────────────────┼─────────────────┐
-                                    ▼                ▼                 ▼
-                            阿里云百炼 qwen-plus   pgvector        Java 微服务
-                            (对话 + embedding)     (知识库 RAG)    (工具调用)
+
+### 客服 Agent 内部
+
+```mermaid
+flowchart TB
+    Q["用户问题"] --> R{"router<br/>政策 / 订单 / 商品 / 闲聊"}
+    R -->|"政策"| K["查 pgvector 知识库"]
+    R -->|"商品"| S["查商品库"]
+    R -->|"订单 / 闲聊"| AG
+    K --> AG["Agent（qwen-plus）"]
+    S --> AG
+    AG -->|"需要工具"| TN["ToolNode"]
+    TN -->|"工具结果"| AG
+    AG -->|"写操作"| IR["interrupt 暂停"]
+    IR -->|"用户确认"| TN2["创建工单"]
+    IR -->|"用户取消"| AG
+    AG --> OUT["回答<br/>（出口校验：假承诺改写）"]
 ```
+
+### 纯文本版（贴简历 / PPT 用）
+
+```
+浏览器 ──► nginx :18080 ──► gateway :8080 ──JWT──► item / cart / user / trade / pay
+                                      │
+                                      └──► ai-service :8087（Python）
+                                                │
+                  ┌─────────────────────────────┼─────────────────────┐
+                  ▼                             ▼                     ▼
+          router（qwen-flash）         LangGraph Agent         pgvector / Postgres
+          政策·订单·商品·闲聊          qwen-plus + 5 个工具      知识库 / 会话记忆
+                  │                             │
+                  └────────► 工具调用走 HTTP ◄───┘
+                            （item / trade 服务）
+```
+
+> 关键设计：网关只做鉴权和路由，业务身份通过 `user-info` 头往下传；
+> ai-service 作为独立 Python 服务挂在网关下，与 Java 服务之间只用 HTTP 交互，不共享数据库。
 
 ---
 
