@@ -19,65 +19,25 @@
 
 ## 架构
 
-### 整体链路
+![整体架构](docs/architecture.png)
 
-```mermaid
-flowchart LR
-    B["浏览器<br/>hmall-portal"] -->|"/api/**"| N["nginx :18080"]
-    N --> G["hm-gateway :8080<br/>JWT 鉴权 · 路由"]
-    G --> I["item-service :8081"]
-    G --> C["cart-service :8082"]
-    G --> U["user-service :8084"]
-    G --> T["trade-service :8085"]
-    G --> P["pay-service :8086"]
-    G --> A["ai-service :8087<br/>Python · FastAPI"]
+![智能客服 Agent 内部流程](docs/architecture-agent.png)
 
-    A --> R["router<br/>qwen-flash 四分类"]
-    R --> L["LangGraph Agent<br/>qwen-plus ReAct"]
-    L --> TL["ToolNode<br/>5 个工具"]
-    TL --> I
-    TL --> T
-    L --> DB[("Postgres<br/>checkpointer")]
-    A --> KB[("pgvector<br/>政策知识库")]
-    A --> LLM["阿里云百炼<br/>对话 + embedding"]
-```
-
-### 客服 Agent 内部
-
-```mermaid
-flowchart TB
-    Q["用户问题"] --> R{"router<br/>政策 / 订单 / 商品 / 闲聊"}
-    R -->|"政策"| K["查 pgvector 知识库"]
-    R -->|"商品"| S["查商品库"]
-    R -->|"订单 / 闲聊"| AG
-    K --> AG["Agent（qwen-plus）"]
-    S --> AG
-    AG -->|"需要工具"| TN["ToolNode"]
-    TN -->|"工具结果"| AG
-    AG -->|"写操作"| IR["interrupt 暂停"]
-    IR -->|"用户确认"| TN2["创建工单"]
-    IR -->|"用户取消"| AG
-    AG --> OUT["回答<br/>（出口校验：假承诺改写）"]
-```
-
-### 纯文本版（贴简历 / PPT 用）
+**纯文本版**（贴简历 / PPT 用，Word 里用等宽字体不会错位）：
 
 ```
-浏览器 ──► nginx :18080 ──► gateway :8080 ──JWT──► item / cart / user / trade / pay
-                                      │
-                                      └──► ai-service :8087（Python）
-                                                │
-                  ┌─────────────────────────────┼─────────────────────┐
-                  ▼                             ▼                     ▼
-          router（qwen-flash）         LangGraph Agent         pgvector / Postgres
-          政策·订单·商品·闲聊          qwen-plus + 5 个工具      知识库 / 会话记忆
-                  │                             │
-                  └────────► 工具调用走 HTTP ◄───┘
-                            （item / trade 服务）
+浏览器 ──► nginx :18080 ──► gateway :8080 ──JWT──► item(:8081) cart(:8082) user(:8084)
+                                        │            trade(:8085) pay(:8086)
+                                        └──► ai-service :8087（Python）
+                                                  │
+                  ┌───────────────────────────────┼──────────────────────┐
+                  ▼                               ▼                      ▼
+          router（qwen-flash）           LangGraph Agent        pgvector / Postgres
+          政策·订单·商品·闲聊            qwen-plus + 5 个工具    知识库 / 会话记忆
 ```
 
 > 关键设计：网关只做鉴权和路由，业务身份通过 `user-info` 头往下传；
-> ai-service 作为独立 Python 服务挂在网关下，与 Java 服务之间只用 HTTP 交互，不共享数据库。
+> ai-service 是独立的 Python 服务，与 Java 服务之间只用 HTTP 交互，不共享数据库。
 
 ---
 
@@ -99,14 +59,16 @@ flowchart TB
 
 ## 快速开始
 
-### 1. 基础设施
+### 1. 基础设施（端口）
 
-| 组件 | 地址 |
-|---|---|
-| Nacos | `192.168.74.128:8848` |
-| MySQL | `192.168.74.128:3306` |
-| RabbitMQ | `192.168.74.128:5672`（vhost `/itheima`） |
-| Redis | `127.0.0.1:6379` |
+| 组件 | 端口 | 用途 |
+|---|---|---|
+| Nacos | 8848 | 注册中心 + 配置中心 |
+| MySQL | 3306 | 业务库（`hmall` / `hm-trade` 等） |
+| PostgreSQL + pgvector | 5433 | 客服知识库 + 会话记忆 |
+| RabbitMQ | 5672 | 异步消息（vhost `/itheima`） |
+
+> 各服务通过 Nacos 发现彼此，地址配置在各自的 `application.yaml` 里，请按自己的环境修改。
 
 ### 2. 启动 Java 侧
 
@@ -123,16 +85,14 @@ mvn clean install -DskipTests
 cd ai-service
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env      # 填入百炼 API Key
-uvicorn app.main:app --reload --port 8087
+copy .env.example .env      # 填入百炼 API Key 和 PG 连接串
+.\.venv\Scripts\python.exe run.py
 ```
 
 ### 4. 前端
 
-```bash
-# 启动 nginx（配置见 D:\Apps\hmall\hmall-nginx）
-# 访问 http://localhost:18080
-```
+商城前端是静态页面，由 nginx 托管，访问 **http://localhost:18080**。
+客服组件代码见 `hmall-nginx/html/hmall-portal/js/chatbot.js`（其余前端资源为课程素材，未入库）。
 
 ---
 
