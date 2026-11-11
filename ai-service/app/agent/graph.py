@@ -220,15 +220,22 @@ CLAIM_RE = re.compile(r"已(为您|为你|帮你|给您)?(创建|提交|生成|�
 
 
 def _guard_claim(answer: str, trace: list[dict]) -> str:
-    """输出兜底：模型声称「已创建工单」，但实际上没调过 create_ticket，就把这句话换掉。
+    """输出兜底：模型声称「已创建工单」，但工具没调、或调用没成功，就把这句话换掉。
 
-    D15 评测抓到的问题：模型有时不调工具，却在回答里说"已为你创建工单"。
-    对用户来说这是假承诺，比说错话更严重。与其指望提示词，不如在出口校验一次。
+    为什么需要：模型有时不调工具，却在回答里说"已为你创建工单"。对用户来说是假承诺，
+    比说错话更严重。提示词压不住（评测里反复出现），所以在出口校验一次。
+
+    为什么判两件事而不是一件：
+        只看「有没有调用 create_ticket」不够——用户点「取消」时工具也被调用过，
+        结果里 created=false，模型若仍说"已创建"，只看调用记录会漏掉这种假话。
     """
-    if not answer:
+    if not answer or not CLAIM_RE.search(answer):
         return answer
+
     called = {t["tool"] for t in trace if "tool" in t}
-    if CLAIM_RE.search(answer) and "create_ticket" not in called:
+    created = any("tool_result" in t and '"created": true' in str(t["tool_result"]) for t in trace)
+
+    if "create_ticket" not in called or not created:
         return "抱歉，工单还没有创建成功。请告诉我订单号，我再帮你提交一次。"
     return answer
 
