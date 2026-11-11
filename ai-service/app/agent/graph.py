@@ -113,7 +113,7 @@ def call_model(state: MessagesState) -> dict:
     return {"messages": [ai_msg]}
 
 
-async def prefetch_policy(state: MessagesState) -> dict:
+async def prefetch(state: MessagesState) -> dict:
     """进模型之前先做两件事：判断问题类型，再把能确定的事实查出来。
 
     为什么需要这个节点：
@@ -184,7 +184,7 @@ def _injected_call(call_id: str, name: str, args: dict, payload: str) -> dict:
 
 def build_graph(checkpointer=None):
     graph = StateGraph(MessagesState)
-    graph.add_node("prefetch", prefetch_policy)
+    graph.add_node("prefetch", prefetch)
     graph.add_node("agent", call_model)
     graph.add_node("tools", ToolNode(TOOLS))
 
