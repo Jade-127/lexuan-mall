@@ -95,7 +95,7 @@ uvicorn app.main:app --reload --port 8087
 
 ## 技术栈
 
-**Java**：Spring Boot 2.7 · Spring Cloud 2021 · Nacos · Gateway · OpenFeign · MyBatis-Plus · MySQL · Redis · RabbitMQ
+**Java**：Spring Boot 2.7 · Spring Cloud 2021 · Nacos · Gateway · OpenFeign · MyBatis-Plus · MySQL · RabbitMQ
 **Python**：FastAPI · LangGraph · LangChain · 阿里云百炼（qwen-plus / text-embedding-v3）· PostgreSQL + pgvector
 **前端**：Vue2（CDN）+ nginx
 
